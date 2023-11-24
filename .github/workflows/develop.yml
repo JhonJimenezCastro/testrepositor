@@ -4,11 +4,16 @@ name: CI-Develop
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "develop" ]
+    branches:
+      - develop
   pull_request:
-    branches: [ "develop" ]
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - develop
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -29,8 +34,62 @@ jobs:
       - name: Run a one-line script
         run: echo Hello, world!
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Add Tags
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          REMOTE: ${{ github.event.pull_request.head.repo.clone_url }}
+          ORIGEN: ${{ github.event.pull_request.head.ref }}
+          DESTINO: ${{ github.event.pull_request.base.ref }}
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          
+          # Comienza el tag con "PR-" seguido del nombre de la rama de origen
+          TAG_BASE="PR-$ORIGEN"
+              
+          ENTORNOS=("develop" "release" "staging" "main")
+          VALID_BRANCH=$(echo $ORIGEN | grep -E '^releases/*')
+              
+          if [ -z "$VALID_BRANCH" ]; then
+            echo "El PR no procede de una rama válida (releases/*), no se añadirán tags."
+            exit 1
+          fi
+          echo "La rama $ORIGEN es válida."
+          
+          DESTINO_INDEX=$(case "$DESTINO" in develop) echo 0 ;; release) echo 1 ;; staging) echo 2 ;; main) echo 3 ;; esac)
+          
+          if [[ -z "$DESTINO_INDEX" ]]; then
+            echo "La rama destino $DESTINO no está permitida en esta operación."
+            exit 1
+          fi
+          echo "La rama destino $DESTINO es válida."
+          
+          # Inicialización de tag concatenado
+          TAG="${TAG_BASE}"
+          
+          for (( i=0; i<=$DESTINO_INDEX; i++ )); do
+            # Concatena el nombre del ambiente a los tags existentes.
+            TAG+="-${ENTORNOS[$i]}"
+            
+            # Verifica si el tag ya existe y, de ser así, evita que se cree de nuevo
+            TAG_EXISTS=$(git tag -l "$TAG")
+            if [ -n "$TAG_EXISTS" ]; then
+              echo "El tag ${TAG} ya existe, se omite su adición."
+              continue # Salta a la siguiente iteración del ciclo for
+            else
+              echo "El tag ${TAG} no existe, se creará despues de verificar el entorno previo."
+            fi        
+            
+            echo "Procediendo a verificar el entorno previo..." 
+      
+            # Si no ha pasado por el ambiente previo, genera un error y termina el script.
+            if [[ i -gt 0 ]] && [[ -z $(git tag -l "${TAG_BASE}-.*${ENTORNOS[$((i-1))]}") ]]; then
+              echo "Error: la rama debe pasar primero por el ambiente ${ENTORNOS[$((i-1))]} antes de avanzar al ambiente ${ENTORNOS[$i]}."
+              exit 1
+            fi
+            echo "Verificación del ambiente previo completada."
+          
+            # Crea el nuevo tag en HEAD (el último commit) y empuja este tag al repositorio remoto
+            git tag "$TAG" HEAD
+            git push "$REMOTE" "$TAG"
+            echo "Tag ${TAG} creado y empujado al repositorio."
+          done
+
