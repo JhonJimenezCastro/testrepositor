@@ -66,7 +66,9 @@ jobs:
             git tag "$TAG" HEAD
             git push "$REMOTE" "$TAG"
             echo "Tag ${TAG} creado y empujado al repositorio."
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git config --global user.name "github-actions[bot]"
             git checkout $ORIGEN
             git commit --allow-empty --message="MERGED ON $DESTINO Trigger PR checks"
-            git push $ORIGEN
+            git push origin $ORIGEN
           fi
