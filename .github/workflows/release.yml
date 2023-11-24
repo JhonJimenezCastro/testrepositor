@@ -1,92 +1,66 @@
-# This is a basic workflow to help you get started with Actions
-
 name: CI-Release
 
-# Controls when the workflow will run
 on:
-  push:
-    branches:
-      - release
   pull_request:
     types:
       - opened
       - synchronize
       - reopened
+      - closed
     branches:
       - release
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   release:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+    env:
+      REMOTE: ${{ github.event.pull_request.head.repo.clone_url }}
+      ORIGEN: ${{ github.event.pull_request.head.ref }}
+      DESTINO: ${{ github.event.pull_request.base.ref }}
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Add Tags
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          REMOTE: ${{ github.event.pull_request.head.repo.clone_url }}
-          ORIGEN: ${{ github.event.pull_request.head.ref }}
-          DESTINO: ${{ github.event.pull_request.base.ref }}
+      - name: Validate Tags on PR Opened
+        if: github.event.action != 'closed'
         run: |
-          
-          # Comienza el tag con "PR-" seguido del nombre de la rama de origen
           TAG_BASE="PR-$ORIGEN"
-              
           ENTORNOS=("develop" "release" "staging" "main")
-          VALID_BRANCH=$(echo $ORIGEN | grep -E '^releases/*')
-              
-          if [ -z "$VALID_BRANCH" ]; then
-            echo "El PR no procede de una rama válida (releases/*), no se añadirán tags."
-            exit 1
-          fi
-          echo "La rama $ORIGEN es válida."
-          
+
           DESTINO_INDEX=$(case "$DESTINO" in develop) echo 0 ;; release) echo 1 ;; staging) echo 2 ;; main) echo 3 ;; esac)
-          
+
           if [[ -z "$DESTINO_INDEX" ]]; then
             echo "La rama destino $DESTINO no está permitida en esta operación."
             exit 1
           fi
-          echo "La rama destino $DESTINO es válida."
-          
-          # Inicialización de tag concatenado
-          TAG="${TAG_BASE}"
-          
-          for (( i=0; i<=$DESTINO_INDEX; i++ )); do
-            # Concatena el nombre del ambiente a los tags existentes.
-            TAG+="-${ENTORNOS[$i]}"
-            
-            # Verifica si el tag ya existe y, de ser así, evita que se cree de nuevo
-            TAG_EXISTS=$(git tag -l "$TAG")
-            if [ -n "$TAG_EXISTS" ]; then
-              echo "El tag ${TAG} ya existe, se omite su adición."
-              continue # Salta a la siguiente iteración del ciclo for
-            else
-              echo "El tag ${TAG} no existe, se creará despues de verificar el entorno previo."
-            fi        
-            
-            echo "Procediendo a verificar el entorno previo..." 
-      
-            # Si no ha pasado por el ambiente previo, genera un error y termina el script.
-            if [[ i -gt 0 ]] && [[ -z $(git tag -l "${TAG_BASE}-.*${ENTORNOS[$((i-1))]}") ]]; then
-              echo "Error: la rama debe pasar primero por el ambiente ${ENTORNOS[$((i-1))]} antes de avanzar al ambiente ${ENTORNOS[$i]}."
-              exit 1
-            fi
-            echo "Verificación del ambiente previo completada."
-          
-            # Crea el nuevo tag en HEAD (el último commit) y empuja este tag al repositorio remoto
+
+          if [[ $DESTINO_INDEX -gt 0 ]] && [[ -z $(git tag -l "${TAG_BASE}-.*${ENTORNOS[$((DESTINO_INDEX-1))]}") ]]; then
+            echo "Error: la rama debe pasar primero por el ambiente ${ENTORNOS[$((DESTINO_INDEX-1))]} antes de avanzar al ambiente ${ENTORNOS[$DESTINO_INDEX]}."
+            exit 1
+          fi
+
+      - name: Add Tags on PR Closed
+        if: github.event.action == 'closed' && github.event.pull_request.merged == true
+        run: |
+          TAG_BASE="PR-$ORIGEN"
+          ENTORNOS=("develop" "release" "staging" "main")
+
+          DESTINO_INDEX=$(case "$DESTINO" in develop) echo 0 ;; release) echo 1 ;; staging) echo 2 ;; main) echo 3 ;; esac)
+
+          if [[ -z "$DESTINO_INDEX" ]]; then
+            echo "La rama destino $DESTINO no está permitida en esta operación."
+            exit 1
+          fi
+
+          TAG="${TAG_BASE}-${ENTORNOS[$DESTINO_INDEX]}"
+
+          TAG_EXISTS=$(git tag -l "$TAG")
+          if [ -n "$TAG_EXISTS" ]; then
+            echo "El tag ${TAG} ya existe, se omite su creación."
+          else
+            # Crea el nuevo Git tag en HEAD (el último commit) y empuja este tag al repositorio remoto
             git tag "$TAG" HEAD
             git push "$REMOTE" "$TAG"
             echo "Tag ${TAG} creado y empujado al repositorio."
-          done
+          fi
