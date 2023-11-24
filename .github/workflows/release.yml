@@ -18,6 +18,7 @@ jobs:
       ORIGEN: ${{ github.event.pull_request.head.ref }}
       DESTINO: ${{ github.event.pull_request.base.ref }}
     steps:
+
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
