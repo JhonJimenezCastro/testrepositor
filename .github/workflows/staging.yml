@@ -36,9 +36,11 @@ jobs:
           fi
 
           if [[ $DESTINO_INDEX -gt 0 ]] && [[ -z $(git tag -l "${TAG_BASE}-.*${ENTORNOS[$((DESTINO_INDEX-1))]}") ]]; then
-            echo "Error: la rama debe pasar primero por el ambiente ${ENTORNOS[$((DESTINO_INDEX-1))]} antes de avanzar al ambiente ${ENTORNOS[$DESTINO_INDEX]}."
+            echo "Error: la rama $ORIGEN debe pasar primero por el ambiente ${ENTORNOS[$((DESTINO_INDEX-1))]} antes de avanzar al ambiente ${ENTORNOS[$DESTINO_INDEX]}."
             exit 1
           fi
+
+          echo "PR $ORIGEN->$DESTINO valido."
 
       - name: Add Tags on PR Closed
         if: github.event.action == 'closed' && github.event.pull_request.merged == true
