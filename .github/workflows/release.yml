@@ -13,10 +13,6 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      REMOTE: ${{ github.event.pull_request.head.repo.clone_url }}
-      ORIGEN: ${{ github.event.pull_request.head.ref }}
-      DESTINO: ${{ github.event.pull_request.base.ref }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -38,29 +34,45 @@ jobs:
             exit 1
           fi
 
-      - name: Re-run staging last check
+      - name: Re-run last check
         if: github.event.pull_request.merged == true
         env:
           OWNER: JhonJimenezCastro
           REPO: testrepositor
-          BRANCH: staging
+          ORIGEN: ${{ github.event.pull_request.head.ref }}
+          DESTINO: "staging"
           TOKEN: ${{ secrets.TOKEN }}
         run: |
-            echo "Procesando la rama: $BRANCH"
-    
-            runId=$(curl \
-              -H "Accept: application/vnd.github.v3+json" \
-              -H "Authorization: Bearer $TOKEN" \
-              https://api.github.com/repos/${OWNER}/${REPO}/actions/runs?branch=${BRANCH} | \
-              jq '.workflow_runs[0].id' || echo '')
-    
-            if [ -z "$runId" ] || [ "$runId" == "null" ]
-            then
-              echo "No se encontraron runs para la rama $BRANCH"
-            else
-              curl \
-                -X POST \
+          echo "Procesando PRs de la rama $ORIGEN contra $DESTINO"
+      
+          # Obtiene todos los PRs abiertos de $ORIGEN a $DESTINO
+          prs=$(curl \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer $TOKEN" \
+            https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open | \
+            jq '.[] | select(.base.ref=="'$DESTINO'" and .head.ref=="'$ORIGEN'") | .head.ref')
+      
+          for pr in $prs
+          do
+              # Elimina las comillas alrededor de la rama
+              branch=${pr//\"}
+      
+              # Obtiene el último run para la rama del PR
+              runId=$(curl \
                 -H "Accept: application/vnd.github.v3+json" \
                 -H "Authorization: Bearer $TOKEN" \
-                https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/${runId}/rerun
-            fi
+                https://api.github.com/repos/${OWNER}/${REPO}/actions/runs?branch=${branch} | \
+                jq '.workflow_runs[0].id')
+      
+              if [ -z "$runId" ] || [ "$runId" == "null" ]
+              then
+                echo "No se encontraron runs para la rama $branch"
+              else
+                # Reejecuta el test
+                curl \
+                  -X POST \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/${runId}/rerun
+              fi
+          done
