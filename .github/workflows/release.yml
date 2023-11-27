@@ -18,11 +18,25 @@ jobs:
       ORIGEN: ${{ github.event.pull_request.head.ref }}
       DESTINO: ${{ github.event.pull_request.base.ref }}
     steps:
-
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Validar que el PR ya pasó por ambiente previo
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          REMOTE: ${{ github.event.pull_request.head.repo.clone_url }}
+          ORIGEN: ${{ github.event.pull_request.head.ref }}
+          DESTINO: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git fetch origin develop
+          CHANGES=$(git diff --name-only origin/develop origin/$ORIGEN)
+          if [ -n "$CHANGES" ]; then
+            echo "Los cambios de la rama ${GITHUB_HEAD_REF} deben haber sido integrados previamente en la rama develop"
+            echo "$CHANGES"
+            exit 1
+          fi
 
       - name: Validate Tags on PR Opened
         if: github.event.action != 'closed'
