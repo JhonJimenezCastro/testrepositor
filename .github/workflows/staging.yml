@@ -5,8 +5,6 @@ on:
     types:
       - opened
       - synchronize
-      - reopened
-      - closed
     branches:
       - staging
 
@@ -23,54 +21,17 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Validate Tags on PR Opened
-        if: github.event.action != 'closed'
+      - name: Validar que el PR ya pasó por ambiente previo
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          REMOTE: ${{ github.event.pull_request.head.repo.clone_url }}
+          ORIGEN: ${{ github.event.pull_request.head.ref }}
+          DESTINO: ${{ github.event.pull_request.base.ref }}
         run: |
-          TAG_BASE="PR-$ORIGEN"
-          ENTORNOS=("develop" "release" "staging" "main")
-
-          DESTINO_INDEX=$(case "$DESTINO" in develop) echo 0 ;; release) echo 1 ;; staging) echo 2 ;; main) echo 3 ;; esac)
-
-          if [[ -z "$DESTINO_INDEX" ]]; then
-            echo "La rama destino $DESTINO no está permitida en esta operación."
+          git fetch origin release
+          CHANGES=$(git diff --name-only origin/release origin/$ORIGEN)
+          if [ -n "$CHANGES" ]; then
+            echo "Los cambios de la rama ${GITHUB_HEAD_REF} deben haber sido integrados previamente en la rama release"
+            echo "$CHANGES"
             exit 1
-          fi
-
-          if [[ $DESTINO_INDEX -gt 0 ]] && [[ -z $(git tag -l "${TAG_BASE}-*${ENTORNOS[$((DESTINO_INDEX-1))]}") ]]; then
-            echo "Error: la rama $ORIGEN debe pasar primero por el ambiente ${ENTORNOS[$((DESTINO_INDEX-1))]} antes de avanzar al ambiente ${ENTORNOS[$DESTINO_INDEX]}."
-            exit 1
-          fi
-
-          echo "PR $ORIGEN->$DESTINO valido."
-
-      - name: Add Tags on PR Closed
-        if: github.event.action == 'closed' && github.event.pull_request.merged == true
-        run: |
-          TAG_BASE="PR-$ORIGEN"
-          ENTORNOS=("develop" "release" "staging" "main")
-
-          DESTINO_INDEX=$(case "$DESTINO" in develop) echo 0 ;; release) echo 1 ;; staging) echo 2 ;; main) echo 3 ;; esac)
-
-          if [[ -z "$DESTINO_INDEX" ]]; then
-            echo "La rama destino $DESTINO no está permitida en esta operación."
-            exit 1
-          fi
-
-          TAG="${TAG_BASE}-${ENTORNOS[$DESTINO_INDEX]}"
-
-          TAG_EXISTS=$(git tag -l "$TAG")
-          if [ -n "$TAG_EXISTS" ]; then
-            echo "El tag ${TAG} ya existe, se omite su creación."
-          else
-            # Crea el nuevo Git tag en HEAD (el último commit) y empuja este tag al repositorio remoto
-            git tag "$TAG" HEAD
-            git push "$REMOTE" "$TAG"
-            echo "Tag ${TAG} creado y empujado al repositorio."
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git config --global user.name "github-actions[bot]"
-            echo " " >> README.md
-            git add README.md
-            git checkout $ORIGEN
-            git commit --allow-empty --message="MERGED ON $DESTINO Trigger PR checks"
-            git push origin $ORIGEN
           fi
