@@ -5,6 +5,8 @@ on:
     types:
       - opened
       - synchronize
+      - reopened
+      - closed
     branches:
       - release
 
@@ -36,3 +38,29 @@ jobs:
             exit 1
           fi
 
+      - name: Re-run staging last check
+        if: github.event.pull_request.merged == true
+        env:
+          OWNER: JhonJimenezCastro
+          REPO: testrepositor
+          BRANCH: staging
+          TOKEN: ${{ secrets.TOKEN }}
+        run: |
+            echo "Procesando la rama: $BRANCH"
+    
+            runId=$(curl \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Authorization: Bearer $TOKEN" \
+              https://api.github.com/repos/${OWNER}/${REPO}/actions/runs?branch=${BRANCH} | \
+              jq '.workflow_runs[0].id' || echo '')
+    
+            if [ -z "$runId" ] || [ "$runId" == "null" ]
+            then
+              echo "No se encontraron runs para la rama $BRANCH"
+            else
+              curl \
+                -X POST \
+                -H "Accept: application/vnd.github.v3+json" \
+                -H "Authorization: Bearer $TOKEN" \
+                https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/${runId}/rerun
+            fi
