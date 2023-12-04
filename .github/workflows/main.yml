@@ -30,10 +30,11 @@ jobs:
           DESTINO: ${{ github.event.pull_request.base.ref }}
         run: |
           git fetch origin staging
-          CHANGES=$(git diff --name-only origin/staging origin/$ORIGEN)
-          if [ -n "$CHANGES" ]; then
+          LAST_COMMIT=$(git rev-parse origin/${GITHUB_HEAD_REF})
+    
+          COMMON_ANCESTOR=$(git merge-base origin/staging $LAST_COMMIT)
+          if [ "$COMMON_ANCESTOR" != "$LAST_COMMIT" ]; then
             echo "Los cambios de la rama ${GITHUB_HEAD_REF} deben haber sido integrados previamente en la rama staging"
-            echo "$CHANGES"
             exit 1
           fi
 
