@@ -6,10 +6,13 @@ on:
       - opened
       - synchronize
       - reopened
-      - closed
       - edited
     branches:
       - develop
+  push:
+    branches:
+      - develop
+    
 
 jobs:
   develop:
@@ -53,3 +56,23 @@ jobs:
                       -H "Authorization: Bearer $TOKEN" \
                       https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/$run_id/rerun)
               fi
+
+      - name: Run on push tests
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # Verificar si el push fue ocasionado por un commit directo o por la mezcla de un PR
+            if [ -n "${{ github.event.before }}" ]; then
+              echo "This push was ocasioned by a commit directo to the branch."
+              # Puedes agregar comandos específicos para ejecutar en este caso
+            elif [ -n "${{ github.event.pull_request }}" ]; then
+              echo "This push was ocasioned by merging a pull request."
+              echo "ORIGEN : ${{ github.event.pull_request.head.ref }}"
+              echo "DESTINO: ${{ github.event.pull_request.base.ref }}"
+              # Puedes agregar comandos específicos para ejecutar en este caso
+            else
+              echo "Unexpected push event."
+              # Puedes agregar comandos específicos para ejecutar en este caso
+            fi
+          else
+            echo "Unexpected event: ${github.event_name}"
+          fi
