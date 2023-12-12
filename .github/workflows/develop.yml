@@ -59,21 +59,12 @@ jobs:
 
 
       - name: Run PUSH tests
+        if: github.event_name == 'push'
         run: |
-          if [ "${{ github.event_name }}" == "push" ]; then
-            # Verificar si el push fue ocasionado por un commit directo o por la mezcla de un PR
-            if [ -n "${{ github.event.before }}" ]; then
-              echo "This push was ocasioned by a commit directo to the branch."
-              # Puedes agregar comandos específicos para ejecutar en este caso
-            elif [ -n "${{ github.event.pull_request }}" ]; then
+          if [ -n "${{ github.event.pull_request.head.ref }}"  ]; then
               echo "ORIGEN: ${{ github.event.pull_request.head.ref }} "
               echo "DESTINO: ${{ github.event.pull_request.base.ref }}"
               echo "This push was ocasioned by merging a pull request."
-              # Puedes agregar comandos específicos para ejecutar en este caso
-            else
-              echo "Unexpected push event."
-              # Puedes agregar comandos específicos para ejecutar en este caso
-            fi
           else
-            echo "Unexpected event: ${github.event_name}"
+              echo "esto fue un push directo a la rama"
           fi
