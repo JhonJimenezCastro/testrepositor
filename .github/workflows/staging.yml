@@ -49,34 +49,23 @@ jobs:
           DESTINO: "main"
           TOKEN: ${{ secrets.TOKEN }}
         run: |  
-            pr_url=$(curl -s \
+          run_id=$(
+              curl -s \
               -H "Accept: application/vnd.github.v3+json" \
               -H "Authorization: Bearer $TOKEN" \
-              https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open | \
-              jq -r '.[] | select(.head.ref=="'$ORIGEN'" and .base.ref=="'$DESTINO'") | .url')
-  
-            pr_sha=$(curl -s \
-              -H "Accept: application/vnd.github.v3+json" \
-              -H "Authorization: Bearer $TOKEN" \
-              $pr_url | jq -r '.head.sha')
-            echo "SHA $pr_sha"
-  
-            run_ids=$(curl -s \
-              -H "Accept: application/vnd.github.v3+json" \
-              -H "Authorization: Bearer $TOKEN" \
-              https://api.github.com/repos/${OWNER}/${REPO}/actions/runs \
-              | jq -r '.workflow_runs[] | select(.head_sha == "'$pr_sha'" ) | .id')
-  
-            for run_id in $run_ids
-            do
-              if [ -z "$run_id" ] || [ "$run_id" == "null" ]
-              then
-                echo "No se encontraron runs para el PR $pr_url"
+              "https://api.github.com/repos/${OWNER}/${REPO}/actions/runs" \
+              | jq '.workflow_runs 
+              | map(select(.head_branch == "'$ORIGEN'" and .path == ".github/workflows/'$DESTINO'.yml")) 
+              | max_by(.updated_at) | .id'
+          ) 
+
+              if [ -z "$run_id" ] || [ "$run_id" == "null" ]; then
+                  echo "No se encontraron runs anteriores"
               else
-                rerun=$(curl -s \
-                  -X POST \
-                  -H "Accept: application/vnd.github.v3+json" \
-                  -H "Authorization: Bearer $TOKEN" \
-                  https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/$run_id/rerun)
-              fi        
-            done
+                  echo "RUN_ID: $run_id"
+                  rerun=$(curl -s \
+                      -X POST \
+                      -H "Accept: application/vnd.github.v3+json" \
+                      -H "Authorization: Bearer $TOKEN" \
+                      https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/$run_id/rerun)
+              fi
