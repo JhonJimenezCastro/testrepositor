@@ -10,14 +10,6 @@ on:
       - edited
     branches:
       - develop
-<<<<<<< Updated upstream
-
-=======
-  push:
-    branches:
-      - develop
-    
->>>>>>> Stashed changes
 jobs:
   develop:
     runs-on: ubuntu-latest
