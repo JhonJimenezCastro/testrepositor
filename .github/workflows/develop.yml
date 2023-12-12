@@ -28,7 +28,7 @@ jobs:
           fetch-tags: true
 
       - name: Re-run last check
-        if: github.event.pull_request.merged == true && false
+        if: github.event.pull_request.merged == true
         env:
           OWNER: JhonJimenezCastro
           REPO: testrepositor
